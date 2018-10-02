@@ -161,7 +161,7 @@ impl<'a, 'b, 'c, 'd, W: Word> SpiMaster<'a, 'b, 'c, 'd, W> {
         c1.set_bit(5, op_mode != OpMode::IMM); // SPTEF or Tx FIFO empty interrupt enable
         c1.set_bit(4, true); // slave/master :: 0/1
         c1.set_bit(3, polarity == Polarity::IdleHigh); // clock polarity idle low/high :: 0/1
-        c1.set_bit(2, phase == Phase::CaptureOnSecondTransition); // clock phase middle/start :: 0/1
+        c1.set_bit(2, phase == Phase::CaptureOnFirstTransition); // clock phase middle/start :: 0/1
         c1.set_bit(1, true); // Slave Select Output Enable
         c1.set_bit(0, false); // most/least significant bit :: 0/1
         reg.c1.write(c1);

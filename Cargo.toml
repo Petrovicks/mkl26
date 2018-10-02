@@ -12,7 +12,7 @@ nb = "0.1.1"
 volatile-register = "^0.2"
 
 [dev_dependencies]
-cortex-m-rt = { version = "^0.5.2", features = ["device"] }
+cortex-m-rt = { version = "^0.5", features = ["device"] }
 
 [features]
 default = [ # default to everything on for docs
@@ -52,3 +52,8 @@ name = "uart"
 [[example]]
 name = "spi_master"
 
+[[example]]
+name = "pwm"
+
+[patch.crates-io]
+cortex-m-rt = { git = "https://github.com/rust-embedded/cortex-m-rt.git", branch = "master" }

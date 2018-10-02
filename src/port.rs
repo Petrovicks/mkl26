@@ -163,6 +163,22 @@ impl<'a> Pin<'a> {
         }
     }
 
+    pub fn to_pwm(mut self) -> Result<PwmPin<'a>, ()> {
+        match (self.port.name(), self.pin) {
+            (PortName::C, 2) => {
+                self.set_mode(4);
+                self.slew_rate(SlewRate::Slow);
+                Ok(PwmPin { _pin: self })
+            },
+            (PortName::D, 4) => {
+                self.set_mode(4);
+                self.slew_rate(SlewRate::Slow);
+                Ok(PwmPin { _pin: self })
+            },
+            _ => Err(())
+        }
+    }
+
     pub fn to_gpio(mut self) -> Gpio<'a> {
         unsafe {
             self.set_mode(1);
@@ -1026,6 +1042,20 @@ impl<'a> ToggleableOutputPin for Gpio<'a> {
     }
 }
 
+pub struct PwmPin<'a> {
+    _pin: Pin<'a>
+}
+
+impl<'a> PwmPin<'a> {
+    pub fn port_name(&self) -> PortName {
+        self._pin.port.name()
+    }
+
+    pub fn pin(&self) -> usize {
+        self._pin.pin
+    }
+}
+
 pub struct AdcPin<'a> {
     _pin: Pin<'a>,
 }
@@ -1039,7 +1069,6 @@ impl<'a> AdcPin<'a> {
         self._pin.pin
     }
 }
-
 pub struct AdcDiffPPin<'a> {
     _pin: Pin<'a>,
 }

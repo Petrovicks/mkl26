@@ -10,7 +10,7 @@ MEMORY
    variables in different memory regions. Below is shown the default value */
 /* _stack_start = ORIGIN(RAM) + LENGTH(RAM); */
 
-EXTERN(_FLASHCONFIG);
+EXTERN(FLASHCONFIG);
 
 SECTIONS
 {

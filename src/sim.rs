@@ -15,6 +15,7 @@ use port::{SpiCs, SpiMiso, SpiMosi, SpiSck};
 use port::{UartRx, UartTx};
 use spi::{self, Divisor, Prescale, SpiMaster};
 use uart::{ConnMode, Uart};
+use tpm::{self, ClockMode, PwmSelect, Tpm, TimerNum};
 
 pub struct ClockGate {
     gate: &'static mut BmeAtomic<u32>,
@@ -193,6 +194,13 @@ impl Sim {
         unsafe { Uart::new(uart, None, None, clkdiv, ConnMode::Loop, gate) }
     }
 
+    pub unsafe fn set_tpm_clksrc(&mut self) {
+        self.reg.sopt2.modify(|mut sopt2| {
+            sopt2.set_bits(24..25, 0b01);
+            sopt2
+        });
+    }
+
     pub unsafe fn set_uart0_clksrc(&mut self, clksrc: Uart0ClkSrc) {
         self.reg.sopt2.modify(|mut sopt2| {
             sopt2.set_bits(26..28, clksrc as u32);
@@ -251,7 +259,7 @@ impl Sim {
         miso: I,
         sck: SpiSck<'c>,
         cs: S,
-        clkdiv: (Prescale, Divisor),
+        clkdiv: (spi::Prescale, Divisor),
         op_mode: spi::OpMode,
         Mode { polarity, phase }: Mode,
         fifo: bool,
@@ -285,6 +293,23 @@ impl Sim {
                 fifo,
                 gate,
             )
+        }
+    }
+
+    pub fn tpm(
+        &mut self,
+        name: TimerNum,
+        cpwms: PwmSelect,
+        cmod: ClockMode,
+        clkdivider: tpm::Prescale,
+        count: u16,
+        channel_sel: u8,
+        pwm_trigger: u16,
+    ) -> Tpm {
+        let mut gate = ClockGate::new(6,24);
+        gate.enable();
+        unsafe {
+            Tpm::new(name, cpwms, cmod, clkdivider, count, channel_sel, pwm_trigger)
         }
     }
 

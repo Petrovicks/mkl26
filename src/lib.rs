@@ -20,4 +20,5 @@ pub mod osc;
 pub mod port;
 pub mod sim;
 pub mod spi;
+pub mod tpm;
 pub mod uart;
