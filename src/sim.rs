@@ -11,11 +11,12 @@ use i2c::{Address, I2cSlave};
 use port::{AdcDiffMPin, AdcDiffPPin, AdcPin};
 use port::{I2cScl, I2cSda};
 use port::{Port, PortName};
+use port::PwmPin;
 use port::{SpiCs, SpiMiso, SpiMosi, SpiSck};
 use port::{UartRx, UartTx};
 use spi::{self, Divisor, Prescale, SpiMaster};
 use uart::{ConnMode, Uart};
-use tpm::{self, ClockMode, PwmSelect, Tpm, TimerNum};
+use tpm::{self, ClockMode, PwmSelect, Tpm, TimerNum, ChannelSel};
 
 pub struct ClockGate {
     gate: &'static mut BmeAtomic<u32>,
@@ -296,20 +297,40 @@ impl Sim {
         }
     }
 
-    pub fn tpm(
+    pub fn tpm<'a, P:Into<Option<PwmPin<'a>>>>(
         &mut self,
         name: TimerNum,
         cpwms: PwmSelect,
         cmod: ClockMode,
         clkdivider: tpm::Prescale,
         count: u16,
-        channel_sel: u8,
-        pwm_trigger: u16,
-    ) -> Tpm {
-        let mut gate = ClockGate::new(6,24);
+        channel_select: ChannelSel,
+        channel_set: u8,
+        pwm_trigger: u32,
+        pin: P,
+    ) -> Result<Tpm<'a>, ()> {
+        let mut gate = match name {
+            TimerNum::TPM0 => ClockGate::new(6,24),
+            TimerNum::TPM1 => ClockGate::new(6,25),
+            TimerNum::TPM2 => ClockGate::new(6,26),
+            _ => return Err(()),
+        };
+        if gate.is_enabled() {
+            return Err(())
+        }
         gate.enable();
         unsafe {
-            Tpm::new(name, cpwms, cmod, clkdivider, count, channel_sel, pwm_trigger)
+            Tpm::new(
+                name,
+                cpwms,
+                cmod,
+                clkdivider,
+                count,
+                channel_select,
+                channel_set,
+                pwm_trigger,
+                pin.into(),
+                )
         }
     }
 

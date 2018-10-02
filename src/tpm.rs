@@ -2,6 +2,7 @@ use volatile_register::{RW};
 use bit_field::BitField;
 use core::cell::UnsafeCell;
 use cortex_m::asm;
+use port::{PwmPin};
 
 //KL26 manual - pp 570-571
 const TPM0_ADDR: usize = 0x4003_8000;
@@ -61,12 +62,28 @@ pub enum Prescale {
     Div128 = 0b111,
 }
 
-pub struct Tpm {
-    _reg: &'static mut TPMRegs,
+pub enum ChannelSel {
+    Ch0 = 0,
+    Ch1 = 1,
+    Ch2 = 2,
+    Ch3 = 3,
+    Ch4 = 4,
+    Ch5 = 5,
 }
 
-impl Tpm {
-    // TODO: allow the selection of the channel
+//based on sourcing current PLL CLK w/ Div8 (48MHz)
+pub enum Positions {
+	FullyRetracted = 0x500,
+	Middle = 0x1000,
+	FullyActuated = 0x1E00,
+}
+
+pub struct Tpm<'a> {
+    reg: &'static mut TPMRegs,
+    _pin: Option<PwmPin<'a>>,
+}
+
+impl<'a> Tpm<'a> {
     // TODO: pass in pin and double check it matches the selected channel
     pub unsafe fn new(
         name: TimerNum,
@@ -74,9 +91,14 @@ impl Tpm {
         cmod: ClockMode,
         clkdivider: Prescale,
         count: u16,
-        channel_sel: u8,
-        pwm_trigger: u16,
-    ) -> Tpm {
+        channel_select: ChannelSel,
+        channel_set: u8,
+        pwm_trigger: u32,
+        pin: Option<PwmPin<'a>>,
+    ) -> Result<Tpm<'a>, ()> {
+            //TODO: Use this to assert correct pin usage
+            let pin_info = pin.as_ref().map(|p| (p.port_name(), p.pin()));
+
             let reg = &mut * match name {
                 TimerNum::TPM0 => TPM0_ADDR as *mut TPMRegs,
                 TimerNum::TPM1 => TPM1_ADDR as *mut TPMRegs,
@@ -90,24 +112,54 @@ impl Tpm {
 
             // set MOD
             reg.modu.write(count as u32);
+
             // set SC values
+            //0 - DMA disable
+            //1 - Clear TOF flag
+            //1 - TOIE
+            //0 - up-counting
             let mut sc = 0b0110_0000;
             sc.set_bit(5, cpwms == PwmSelect::UpDown);
             sc.set_bits(0..3, clkdivider as u32);
             reg.sc.write(sc);
 
-            // Need to reset channel SC reg before setting it.
-            reg.c4sc.write(0);
+            //Set CnSC to 0 to allow for writing.
+            //Write to CnSC
+            //Write to CnV (trigger value for PWM). 
+            match channel_select {
+                ChannelSel::Ch0 => {
+                    reg.c0sc.write(0);
+                    reg.c0sc.write(channel_set as u32);
+                    reg.c0v.write(pwm_trigger as u32);
+                },
+                ChannelSel::Ch1 => {
+                    reg.c1sc.write(0);
+                    reg.c1sc.write(channel_set as u32);
+                    reg.c1v.write(pwm_trigger as u32);
 
-            // No delay needed as the TPM is still disabled.
+                },
+                ChannelSel::Ch2 => {
+                    reg.c2sc.write(0);
+                    reg.c2sc.write(channel_set as u32);
+                    reg.c2v.write(pwm_trigger as u32);
+                },
+                ChannelSel::Ch3 => {
+                    reg.c3sc.write(0);
+                    reg.c3sc.write(channel_set as u32);
+                    reg.c3v.write(pwm_trigger as u32);
+                },
+                ChannelSel::Ch4 => {
+                    reg.c4sc.write(0);
+                    reg.c4sc.write(channel_set as u32);
+                    reg.c4v.write(pwm_trigger as u32);
+                },
+                ChannelSel::Ch5 => {
+                    reg.c5sc.write(0);
+                    reg.c5sc.write(channel_set as u32);
+                    reg.c5v.write(pwm_trigger as u32);
 
-            // channel select and mode
-            // TODO : Edge selection for PWM output (high-true default: pp575)
-            // CH4 - high-true : 01010
-            reg.c4sc.write(channel_sel as u32);
-
-            // pwm_trigger sets the value where the PWM pule ends
-            reg.c4v.write(pwm_trigger as u32);
+                },
+            }
 
             // Enable the TPM.
             reg.sc.modify(|mut sc| {
@@ -115,12 +167,38 @@ impl Tpm {
                 sc
             });
 
-            Tpm {
-                _reg: reg,
-            }
-    }
-}
+            //Demo code. Delays were arbitrary times to allow the actuator to move fully.
+            //This also demonstrates that writing to CnV after the setup does what the datasheet implies.
+            //In this case, cmod is on w/ EPWM selected: write after counter goes from MOD to 0. 
+            /*asm::delay(400_000_000);
 
+            reg.c4v.write(Positions::FullyRetracted as u32);
+
+            asm::delay(200_000_000);
+
+            reg.c4v.write(Positions::Middle as u32);
+
+            asm::delay(200_000_000);
+
+            reg.c4v.write(Positions::FullyActuated as u32);
+
+            asm::delay(200_000_000);
+
+            reg.c4v.write(Positions::FullyRetracted as u32);*/
+
+            Ok(Tpm {reg, _pin:pin})
+    }
+
+    //Attempt at writing to c4v through a setter.
+    //Writes work fine if put into the initialization block, but fail when using
+    //a helper function. In this case, it appears to get stuck in an infinite loop
+    //while trying ot write to the register. Writing to ANY tpm register in this fashion will
+    //cause the pin to produce identical sawtooth waveforms regardless of the register. 
+    pub fn set_trigger(&mut self) {
+        unsafe { self.reg.c4v.write(Positions::FullyRetracted as u32); }
+    }
+    
+}
 
 //Tests for correct memory addresses.
 #[cfg(test)]

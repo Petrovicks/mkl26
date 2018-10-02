@@ -16,7 +16,7 @@ use mkl26::osc::Osc;
 use mkl26::port::PortName;
 use mkl26::sim::{Sim, Uart0ClkSrc};
 use mkl26::sim::cop::Cop;
-use mkl26::tpm::{ClockMode, Prescale, PwmSelect, TimerNum};
+use mkl26::tpm::{ClockMode, Prescale, PwmSelect, TimerNum, ChannelSel, Positions, Tpm};
 use mkl26::uart;
 
 #[link_section = ".flashconfig"]
@@ -75,16 +75,19 @@ fn main() -> ! {
     //sets register value in sopt2 to source TPM to PLL (hardcoded for now)
     unsafe { sim.set_tpm_clksrc(); }
 
-    //new function call from sim module to create a tpm object
-    let _tpm0 = sim.tpm(
+    let mut _tpm0 = sim.tpm(
         TimerNum::TPM0,
         PwmSelect::Up,
         ClockMode::EveryClock,
-        Prescale::Div16,
-        0xFFFF,
+        Prescale::Div8,
+        0x6000,
+        ChannelSel::Ch4,
         0b1110_1000,
-        15000,
-    );
+        Positions::FullyActuated as u32,
+        _pwm_pin,
+        ).unwrap();
+
+    _tpm0.set_trigger();
 
     led.high();
 

@@ -165,14 +165,18 @@ impl<'a> Pin<'a> {
 
     pub fn to_pwm(mut self) -> Result<PwmPin<'a>, ()> {
         match (self.port.name(), self.pin) {
-            (PortName::C, 2) => {
+            (PortName::C, 1) |
+            (PortName::C, 2) |
+            (PortName::C, 3) |
+            (PortName::C, 4) |
+            (PortName::D, 0) |
+            (PortName::D, 1) |
+            (PortName::D, 2) |
+            (PortName::D, 3) |
+            (PortName::D, 4) |
+            (PortName::D, 5) => {
                 self.set_mode(4);
-                self.slew_rate(SlewRate::Slow);
-                Ok(PwmPin { _pin: self })
-            },
-            (PortName::D, 4) => {
-                self.set_mode(4);
-                self.slew_rate(SlewRate::Slow);
+                //self.slew_rate(SlewRate::Slow);
                 Ok(PwmPin { _pin: self })
             },
             _ => Err(())
