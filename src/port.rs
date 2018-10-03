@@ -1073,6 +1073,7 @@ impl<'a> AdcPin<'a> {
         self._pin.pin
     }
 }
+
 pub struct AdcDiffPPin<'a> {
     _pin: Pin<'a>,
 }

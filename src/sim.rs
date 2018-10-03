@@ -297,7 +297,7 @@ impl Sim {
         }
     }
 
-    pub fn tpm<'a, P:Into<Option<PwmPin<'a>>>>(
+    pub fn tpm<'a, P:Into<Option<PwmPin<'a>>>> (
         &mut self,
         name: TimerNum,
         cpwms: PwmSelect,
@@ -330,7 +330,7 @@ impl Sim {
                 channel_set,
                 pwm_trigger,
                 pin.into(),
-                )
+            )
         }
     }
 

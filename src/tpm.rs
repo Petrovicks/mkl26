@@ -2,7 +2,7 @@ use volatile_register::{RW};
 use bit_field::BitField;
 use core::cell::UnsafeCell;
 use cortex_m::asm;
-use port::{PwmPin};
+use port::PwmPin;
 
 //KL26 manual - pp 570-571
 const TPM0_ADDR: usize = 0x4003_8000;
