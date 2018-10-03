@@ -186,7 +186,10 @@ impl<'a> Tpm<'a> {
 
             reg.c4v.write(Positions::FullyRetracted as u32);*/
 
-            Ok(Tpm {reg, _pin:pin})
+            Ok(Tpm {
+                reg, 
+                _pin:pin,
+            })
     }
 
     //Attempt at writing to c4v through a setter.
