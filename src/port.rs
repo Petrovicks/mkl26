@@ -176,9 +176,20 @@ impl<'a> Pin<'a> {
             (PortName::D, 4) |
             (PortName::D, 5) => {
                 self.set_mode(4);
-                //self.slew_rate(SlewRate::Slow);
                 Ok(PwmPin { _pin: self })
             },
+            (PortName::A, 0) |
+            (PortName::A, 1) |
+            (PortName::A, 2) |
+            (PortName::A, 3) |
+            (PortName::A, 4) |
+            (PortName::B, 0) |
+            (PortName::B, 1) |
+            (PortName::E, 30) => {
+                self.set_mode(3);
+                Ok(PwmPin { _pin: self})
+            },
+
             _ => Err(())
         }
     }

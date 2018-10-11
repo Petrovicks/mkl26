@@ -16,7 +16,7 @@ use mkl26::osc::Osc;
 use mkl26::port::PortName;
 use mkl26::sim::{Sim, Uart0ClkSrc};
 use mkl26::sim::cop::Cop;
-use mkl26::tpm::{ClockMode, Prescale, PwmSelect, TimerNum, ChannelSel, Positions, Tpm};
+use mkl26::tpm::{ClockMode, Prescale, PwmSelect, TimerNum, ChannelSelect, Mode};
 use mkl26::uart;
 
 #[link_section = ".flashconfig"]
@@ -30,6 +30,13 @@ pre_init!(disable_wdog);
 
 unsafe fn disable_wdog() {
     Cop::new().init(None);
+}
+
+//based on sourcing current PLL CLK w/ Div8 (48MHz)
+pub enum Positions {
+    FullyRetracted = 0x500,
+    Middle = 0x1000,
+    FullyActuated = 0x1E00,
 }
 
 entry!(main);
@@ -81,20 +88,25 @@ fn main() -> ! {
         ClockMode::EveryClock,
         Prescale::Div8,
         0x6000,
-        ChannelSel::Ch4,
-        0b1110_1000,
-        Positions::FullyActuated as u32,
         _pwm_pin,
-        ).unwrap();
-
-    _tpm0.set_trigger();
+    ).unwrap();
 
     led.high();
+
+    //The 0b10 argument corresponds to edge and level selection (Table 31-34).
+    //TODO: Proper handling of edge and level selection.
+    _tpm0.channel(ChannelSelect::Ch4).channel_mode(Mode::EdgePWM, 0b10);
+    _tpm0.channel(ChannelSelect::Ch4).channel_trigger(0x1E00 as u32);
 
     write!(uart, "PWM Test\r\n").unwrap();
 
     loop {
-        asm::delay(3_000_000);
+        asm::delay(80_000_000);
+        led.low();
+        _tpm0.set_period(0x9000);
+        asm::delay(80_000_000);
+        led.high();
+        _tpm0.set_period(0x2000);
     }
 }
 

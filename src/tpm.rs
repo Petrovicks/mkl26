@@ -1,8 +1,7 @@
 use volatile_register::{RW};
 use bit_field::BitField;
-use core::cell::UnsafeCell;
-use cortex_m::asm;
 use port::PwmPin;
+use sim::ClockGate;
 
 //KL26 manual - pp 570-571
 const TPM0_ADDR: usize = 0x4003_8000;
@@ -62,7 +61,7 @@ pub enum Prescale {
     Div128 = 0b111,
 }
 
-pub enum ChannelSel {
+pub enum ChannelSelect {
     Ch0 = 0,
     Ch1 = 1,
     Ch2 = 2,
@@ -71,17 +70,13 @@ pub enum ChannelSel {
     Ch5 = 5,
 }
 
-//based on sourcing current PLL CLK w/ Div8 (48MHz)
-pub enum Positions {
-	FullyRetracted = 0x500,
-	Middle = 0x1000,
-	FullyActuated = 0x1E00,
-}
-
 pub struct Tpm<'a> {
     reg: &'static mut TPMRegs,
     _pin: Option<PwmPin<'a>>,
+    _gate: ClockGate,
 }
+
+use cortex_m::asm;
 
 impl<'a> Tpm<'a> {
     // TODO: pass in pin and double check it matches the selected channel
@@ -91,13 +86,11 @@ impl<'a> Tpm<'a> {
         cmod: ClockMode,
         clkdivider: Prescale,
         count: u16,
-        channel_select: ChannelSel,
-        channel_set: u8,
-        pwm_trigger: u32,
         pin: Option<PwmPin<'a>>,
+        gate: ClockGate,
     ) -> Result<Tpm<'a>, ()> {
             //TODO: Use this to assert correct pin usage
-            let pin_info = pin.as_ref().map(|p| (p.port_name(), p.pin()));
+            //let pin_info = pin.as_ref().map(|p| (p.port_name(), p.pin()));
 
             let reg = &mut * match name {
                 TimerNum::TPM0 => TPM0_ADDR as *mut TPMRegs,
@@ -123,84 +116,77 @@ impl<'a> Tpm<'a> {
             sc.set_bits(0..3, clkdivider as u32);
             reg.sc.write(sc);
 
-            //Set CnSC to 0 to allow for writing.
-            //Write to CnSC
-            //Write to CnV (trigger value for PWM). 
-            match channel_select {
-                ChannelSel::Ch0 => {
-                    reg.c0sc.write(0);
-                    reg.c0sc.write(channel_set as u32);
-                    reg.c0v.write(pwm_trigger as u32);
-                },
-                ChannelSel::Ch1 => {
-                    reg.c1sc.write(0);
-                    reg.c1sc.write(channel_set as u32);
-                    reg.c1v.write(pwm_trigger as u32);
-
-                },
-                ChannelSel::Ch2 => {
-                    reg.c2sc.write(0);
-                    reg.c2sc.write(channel_set as u32);
-                    reg.c2v.write(pwm_trigger as u32);
-                },
-                ChannelSel::Ch3 => {
-                    reg.c3sc.write(0);
-                    reg.c3sc.write(channel_set as u32);
-                    reg.c3v.write(pwm_trigger as u32);
-                },
-                ChannelSel::Ch4 => {
-                    reg.c4sc.write(0);
-                    reg.c4sc.write(channel_set as u32);
-                    reg.c4v.write(pwm_trigger as u32);
-                },
-                ChannelSel::Ch5 => {
-                    reg.c5sc.write(0);
-                    reg.c5sc.write(channel_set as u32);
-                    reg.c5v.write(pwm_trigger as u32);
-
-                },
-            }
-
             // Enable the TPM.
             reg.sc.modify(|mut sc| {
                 sc.set_bits(3..5, cmod as u32);
                 sc
             });
 
-            //Demo code. Delays were arbitrary times to allow the actuator to move fully.
-            //This also demonstrates that writing to CnV after the setup does what the datasheet implies.
-            //In this case, cmod is on w/ EPWM selected: write after counter goes from MOD to 0. 
-            /*asm::delay(400_000_000);
-
-            reg.c4v.write(Positions::FullyRetracted as u32);
-
-            asm::delay(200_000_000);
-
-            reg.c4v.write(Positions::Middle as u32);
-
-            asm::delay(200_000_000);
-
-            reg.c4v.write(Positions::FullyActuated as u32);
-
-            asm::delay(200_000_000);
-
-            reg.c4v.write(Positions::FullyRetracted as u32);*/
-
             Ok(Tpm {
-                reg, 
+                reg,
                 _pin:pin,
+                _gate: gate,
             })
     }
 
-    //Attempt at writing to c4v through a setter.
-    //Writes work fine if put into the initialization block, but fail when using
-    //a helper function. In this case, it appears to get stuck in an infinite loop
-    //while trying ot write to the register. Writing to ANY tpm register in this fashion will
-    //cause the pin to produce identical sawtooth waveforms regardless of the register. 
-    pub fn set_trigger(&mut self) {
-        unsafe { self.reg.c4v.write(Positions::FullyRetracted as u32); }
+    pub fn channel(&mut self, channel:ChannelSelect) -> TpmChannel {
+        TpmChannel {
+            _tpm: self,
+            _channel: channel,
+        }
     }
-    
+
+    pub fn set_period(&mut self, period: u16) {
+        unsafe{ self.reg.modu.write(period as u32); }
+    }
+}
+
+pub struct TpmChannel<'a> {
+    _tpm: &'a Tpm<'a>,
+    _channel: ChannelSelect,
+}
+
+//See Table 31-34 for specific definitions of these modes.
+pub enum Mode {
+    InputCapture = 0,
+    OutputCompare = 1,
+    EdgePWM = 2,
+    PulseOutputCompare = 3,
+    CenterPWM = 4,
+}
+
+//TODO: More robust channel options using enums.
+impl<'a> TpmChannel<'a> {
+    pub fn channel_mode(&mut self, mode:Mode, edge:u8) {
+        let mut cnsc = 0;
+
+        cnsc.set_bit(7, true); //Clear CHF
+        cnsc.set_bit(6, true); //CHIE = true
+        cnsc.set_bits(4..6, mode as u8); //set channel mode
+        cnsc.set_bits(2..4, edge as u8); //edge and level selection
+
+        //0b1110_1000 works
+        match self._channel {
+            ChannelSelect::Ch0 => unsafe { self._tpm.reg.c0sc.write(cnsc as u32); },
+            ChannelSelect::Ch1 => unsafe { self._tpm.reg.c1sc.write(cnsc as u32); },
+            ChannelSelect::Ch2 => unsafe { self._tpm.reg.c2sc.write(cnsc as u32); },
+            ChannelSelect::Ch3 => unsafe { self._tpm.reg.c3sc.write(cnsc as u32); },
+            ChannelSelect::Ch4 => unsafe { self._tpm.reg.c4sc.write(cnsc as u32); },
+            ChannelSelect::Ch5 => unsafe { self._tpm.reg.c5sc.write(cnsc as u32); },
+        }
+
+    }
+
+    pub fn channel_trigger(&mut self, channel_val: u32) {
+        match self._channel {
+            ChannelSelect::Ch0 => unsafe { self._tpm.reg.c0v.write(channel_val as u32); },
+            ChannelSelect::Ch1 => unsafe { self._tpm.reg.c1v.write(channel_val as u32); },
+            ChannelSelect::Ch2 => unsafe { self._tpm.reg.c2v.write(channel_val as u32); },
+            ChannelSelect::Ch3 => unsafe { self._tpm.reg.c3v.write(channel_val as u32); },
+            ChannelSelect::Ch4 => unsafe { self._tpm.reg.c4v.write(channel_val as u32); },
+            ChannelSelect::Ch5 => unsafe { self._tpm.reg.c5v.write(channel_val as u32); },
+        }
+    }
 }
 
 //Tests for correct memory addresses.
