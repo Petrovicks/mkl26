@@ -82,7 +82,7 @@ fn main() -> ! {
     //sets register value in sopt2 to source TPM to PLL (hardcoded for now)
     unsafe { sim.set_tpm_clksrc(); }
 
-    let mut _tpm0 = sim.tpm(
+    let mut tpm0 = sim.tpm(
         TimerNum::TPM0,
         PwmSelect::Up,
         ClockMode::EveryClock,
@@ -95,18 +95,21 @@ fn main() -> ! {
 
     //The 0b10 argument corresponds to edge and level selection (Table 31-34).
     //TODO: Proper handling of edge and level selection.
-    _tpm0.channel(ChannelSelect::Ch4).channel_mode(Mode::EdgePWM, 0b10);
-    _tpm0.channel(ChannelSelect::Ch4).channel_trigger(0x1E00 as u32);
+    tpm0.channel(ChannelSelect::Ch4).channel_mode(Mode::EdgePWM, 0b10);
+    tpm0.channel(ChannelSelect::Ch4).channel_trigger(0x1E00 as u32);
 
     write!(uart, "PWM Test\r\n").unwrap();
 
     loop {
-        asm::delay(80_000_000);
+        asm::delay(100_000_000);
         led.low();
-        _tpm0.set_period(0x9000);
-        asm::delay(80_000_000);
+        tpm0.channel(ChannelSelect::Ch4).channel_trigger(Positions::Middle as u32);
+        asm::delay(100_000_000);
         led.high();
-        _tpm0.set_period(0x2000);
+        tpm0.channel(ChannelSelect::Ch4).channel_trigger(Positions::FullyRetracted as u32);
+        asm::delay(100_000_000);
+        led.low();
+        tpm0.channel(ChannelSelect::Ch4).channel_trigger(Positions::FullyActuated as u32);
     }
 }
 

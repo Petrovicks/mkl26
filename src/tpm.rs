@@ -19,7 +19,7 @@ pub enum TimerNum {
 struct TPMRegs {
     sc:         RW<u32>,
     cnt:        RW<u32>,
-    modu:       RW<u32>,
+    mod_:       RW<u32>,
     c0sc:       RW<u32>,
     c0v:        RW<u32>,
     c1sc:       RW<u32>,
@@ -104,7 +104,7 @@ impl<'a> Tpm<'a> {
             reg.cnt.write(0);
 
             // set MOD
-            reg.modu.write(count as u32);
+            reg.mod_.write(count as u32);
 
             // set SC values
             //0 - DMA disable
@@ -137,7 +137,7 @@ impl<'a> Tpm<'a> {
     }
 
     pub fn set_period(&mut self, period: u16) {
-        unsafe{ self.reg.modu.write(period as u32); }
+        unsafe{ self.reg.mod_.write(period as u32); }
     }
 }
 
@@ -200,7 +200,7 @@ mod tests {
             let reg = & *(TPM0_ADDR as *const TPMRegs);
             assert_eq!(0x4003_8000 as *const RW<u32>, &reg.sc           as *const RW<u32>, "sc");
             assert_eq!(0x4003_8004 as *const RW<u32>, &reg.cnt          as *const RW<u32>, "cnt");
-            assert_eq!(0x4003_8008 as *const RW<u32>, &reg.modu         as *const RW<u32>, "modu");
+            assert_eq!(0x4003_8008 as *const RW<u32>, &reg.mod_         as *const RW<u32>, "mod_");
             assert_eq!(0x4003_800C as *const RW<u32>, &reg.c0sc         as *const RW<u32>, "c0sc");
             assert_eq!(0x4003_8010 as *const RW<u32>, &reg.c0v          as *const RW<u32>, "c0v");
             assert_eq!(0x4003_8014 as *const RW<u32>, &reg.c1sc         as *const RW<u32>, "c1sc");
