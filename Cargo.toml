@@ -55,4 +55,10 @@ name = "spi_master"
 [[example]]
 name = "pwm"
 
+[[example]]
+name = "bike_system"
+
+[[example]]
+name = "pololu_uart"
+
 cortex-m-rt = { git = "https://github.com/rust-embedded/cortex-m-rt.git", branch = "master" }
