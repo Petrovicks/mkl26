@@ -205,6 +205,23 @@ impl Tpm {
             self.reg.mod_.write(period as u32);
         }
     }
+
+    pub fn overflow(&mut self) -> bool {
+        if self.reg.sc.read().get_bit(7) {
+            return true;
+        }
+        return false;
+    }
+
+    //Writes 1 to TOF field in CnSC register to reset it (Section 31.3.1).
+    pub fn reset_overflow_flag(&mut self) {
+        unsafe {
+            self.reg.sc.modify(|mut sc| {
+                sc.set_bit(7, true);
+                sc
+            });
+        }
+    }
 }
 
 pub struct Channel<'a, 'b> {
@@ -290,6 +307,22 @@ impl<'a, 'b> Channel<'a, 'b> {
     pub fn set_value(&mut self, channel_val: u16) {
         unsafe {
             self.reg.cnv.write(channel_val as u32);
+        }
+    }
+
+    pub fn channel_flag(&mut self) -> bool {
+        if self.reg.cnsc.read().get_bit(7) {
+            return true;
+        }
+        return false;
+    }
+
+    pub fn reset_channel_flag(&mut self) {
+        unsafe {
+            self.reg.cnsc.modify(|mut cnsc| {
+                cnsc.set_bit(7, true);
+                cnsc
+            });
         }
     }
 }
