@@ -10,6 +10,7 @@ extern crate mkl26;
 
 use cortex_m::interrupt;
 use cortex_m::peripheral::{Peripherals, NVIC};
+use cortex_m::asm;
 
 use mkl26::interrupts::Interrupt;
 use mkl26::mcg::{Clock, Mcg, OscRange};
@@ -114,7 +115,17 @@ fn main() -> ! {
             peripherals.NVIC.enable(Interrupt::TPM0);
         });
     }
-    loop {}
+    loop {
+    	unsafe {
+            //60 seconds = 1 minute
+            //(1 rotation)/(time in seconds)*(60 times per minute) = rpm
+            RPM = 60.0/ (TIME_INTERVAL);
+
+            //2*pi*radius = circumference
+            //speed = rpm*(2*pi*radius)*(60 times per hour)-> radius units per hour
+            SPEED = RPM * (2.0 * 3.14159 * RADIUS) * 60.0;
+        }
+    }
 }
 
 interrupt!(TPM0, tpm_isr);
@@ -124,6 +135,7 @@ fn tpm_isr() {
         //Checks if overflow triggered the ISR.
         if TPM0_.as_mut().unwrap().overflow() {
             OVERFLOW_COUNT = OVERFLOW_COUNT + 1.0;
+            TIME_INTERVAL = TIME_INTERVAL + OVERFLOW_COUNT * 0x6000 as f32;
             TPM0_.as_mut().unwrap().reset_overflow_flag();
         }
 
@@ -138,14 +150,6 @@ fn tpm_isr() {
                 * (TPM0_CHANNEL.as_mut().unwrap().get_value() as f32
                     + OVERFLOW_COUNT * 0x6000 as f32)
                 / (48000000.0);
-
-            //seconds/60 = minute
-            //(1 rotation)/(time in seconds * 60) = rpm
-            RPM = 1.0 / (TIME_INTERVAL * 60.0);
-
-            //2*pi*radius = circumference
-            //speed = rpm*(2*pi*radius)/60 -> radius units per hour
-            SPEED = RPM * (2.0 * 3.14159 * RADIUS) / 60.0;
         }
     }
 }
