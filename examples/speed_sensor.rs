@@ -10,7 +10,6 @@ extern crate mkl26;
 
 use cortex_m::interrupt;
 use cortex_m::peripheral::{Peripherals, NVIC};
-use cortex_m::asm;
 
 use mkl26::interrupts::Interrupt;
 use mkl26::mcg::{Clock, Mcg, OscRange};
@@ -85,19 +84,21 @@ fn main() -> ! {
         LED_PIN = Some(PORT_C.as_mut().unwrap().pin(5).to_gpio());
         LED_PIN.as_mut().unwrap().output();
 
-        //Period is ~5ms
+        //Load 0xFFFF to the counter. Setting a longer period just makes things easier to work
+        //with since less interrupts are generated for overflows.
         TPM0_ = Some(
             sim.tpm(
                 TpmNum::TPM0,
                 PwmSelect::Up,
                 ClockMode::EveryClock,
                 Prescale::Div8,
-                0x6000,
+                0xFFFF,
             ).unwrap(),
         );
 
         //Writing to CnV is ignored when mode is set to InputCapture.
         //NOTE: Tpm module writes to cnv before setting InputCapture.
+        //I considered this a dummy variable as it is irrelevant for this example.
         TPM0_CHANNEL = Some(
             TPM0_
                 .as_mut()
@@ -110,6 +111,7 @@ fn main() -> ! {
                 ).unwrap(),
         );
 
+        //Note usage of _TPM0 above due to conflict here.
         interrupt::free(|_| {
             NVIC::unpend(Interrupt::TPM0);
             peripherals.NVIC.enable(Interrupt::TPM0);
@@ -117,6 +119,8 @@ fn main() -> ! {
     }
     loop {
     	unsafe {
+    		//These should be updated with a delay instead of with every loop iteration.
+    		//A simple counter or utilization of the PIT would work.
             //60 seconds = 1 minute
             //(1 rotation)/(time in seconds)*(60 times per minute) = rpm
             RPM = 60.0/ (TIME_INTERVAL);
@@ -135,7 +139,7 @@ fn tpm_isr() {
         //Checks if overflow triggered the ISR.
         if TPM0_.as_mut().unwrap().overflow() {
             OVERFLOW_COUNT = OVERFLOW_COUNT + 1.0;
-            TIME_INTERVAL = TIME_INTERVAL + OVERFLOW_COUNT * 0x6000 as f32;
+            TIME_INTERVAL = TIME_INTERVAL + OVERFLOW_COUNT * 0xFFFF as f32 / 48000000.0;
             TPM0_.as_mut().unwrap().reset_overflow_flag();
         }
 
@@ -144,12 +148,32 @@ fn tpm_isr() {
             TPM0_CHANNEL.as_mut().unwrap().reset_channel_flag();
             LED_PIN.as_mut().unwrap().toggle();
 
-            //Time for one full revolution in seconds.
+        	//Time for one full revolution in seconds.
             //(Prescale)*(channel_value+overflowcount*MOD)/(48MHz - CLK speed)
-            TIME_INTERVAL = (8.0)
+            //This value is used to check if the last reading happened too quickly. This is a
+            //very rough debouncing mechanism. If the time interval is shorter than this then
+            //the bike is currently going faster than ~30mph, which we will already consider as
+            //too fast.
+            let dummy_interval = (8.0)
                 * (TPM0_CHANNEL.as_mut().unwrap().get_value() as f32
-                    + OVERFLOW_COUNT * 0x6000 as f32)
+                    + OVERFLOW_COUNT * 0xFFFF as f32)
                 / (48000000.0);
+
+            //Time estimation gained by solving the following:
+            //(1/(x seconds) * (2pi*(radius in inches) ) * 60/(miles in an inch -> 1.57E-5) ~= 30mph
+            //x ~= 30ms, a good "upper threshold". Using 5ms interval for switch debounce works decent.
+            if dummy_interval > 0.005 {
+	            TIME_INTERVAL = dummy_interval;
+	            OVERFLOW_COUNT = 0.0;
+            }
+
+            //Rough example of handling if it's below this threshold consistently.
+            // else if dummy_interval < 0.025 {
+            // 	if counter > 10 {
+            // 		ESTOP
+            // 	}
+            // 	counter = counter + 1;
+            // }
         }
     }
 }
