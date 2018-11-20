@@ -14,7 +14,7 @@ use cortex_m::peripheral::{Peripherals, NVIC};
 use mkl26::interrupts::Interrupt;
 use mkl26::mcg::{Clock, Mcg, OscRange};
 use mkl26::osc::Osc;
-use mkl26::port::{Gpio, Port, PortName, Pull};
+use mkl26::port::{Gpio, Port, PortName, Pull, InterruptModes};
 use mkl26::sim::cop::Cop;
 use mkl26::sim::{ClkSrc, Sim};
 use mkl26::tpm::{CaptureEdge, ChannelMode, ChannelSelect, Tpm};
@@ -35,6 +35,7 @@ unsafe fn disable_wdog() {
 }
 
 static mut PORT_C: Option<Port> = None;
+static mut PORT_D: Option<Port> = None;
 // static mut TPM_PIN: Option<TpmPin<'static>> = None;
 static mut TPM0_: Option<Tpm> = None;
 static mut TPM0_CHANNEL: Option<Channel<'static, 'static>> = None;
@@ -79,6 +80,12 @@ fn main() -> ! {
         PORT_C = Some(sim.port(PortName::C));
         PORT_C.as_mut().unwrap().pin(1).pull(Pull::Up);
 
+        //Set up Port D pin 6 (Pin 21 on teensy) to a digital pin pulled up with interrupt enabled.
+        PORT_D = Some(sim.port(PortName::D));
+        let whatIsMyPurpose = Some(PORT_D.as_mut().unwrap().pin(6).to_gpio());
+        PORT_D.as_mut().unwrap().pin(6).pull(Pull::Up);
+        PORT_D.as_mut().unwrap().pin(6).set_interrupt(InterruptModes::InterruptFallingEdge as u32);
+
         let tpm_pin = PORT_C.as_mut().unwrap().pin(1).to_tpm().ok();
 
         LED_PIN = Some(PORT_C.as_mut().unwrap().pin(5).to_gpio());
@@ -111,10 +118,16 @@ fn main() -> ! {
                 ).unwrap(),
         );
 
+        //Pin 21 - Port D - Enable pin interrupt (PORTC_D)
+        interrupt::free(|_| {
+            NVIC::unpend(Interrupt::PORTC_D);
+            peripherals.NVIC.enable(Interrupt::PORTC_D);
+        });
+
         //Note usage of _TPM0 above due to conflict here.
         interrupt::free(|_| {
-            NVIC::unpend(Interrupt::TPM0);
-            peripherals.NVIC.enable(Interrupt::TPM0);
+        	NVIC::unpend(Interrupt::TPM0);
+        	peripherals.NVIC.enable(Interrupt::TPM0);
         });
     }
     loop {
@@ -132,7 +145,9 @@ fn main() -> ! {
     }
 }
 
+//Both interrupts use this isr.
 interrupt!(TPM0, tpm_isr);
+interrupt!(PORTC_D, tpm_isr);
 
 fn tpm_isr() {
     unsafe {
@@ -144,8 +159,12 @@ fn tpm_isr() {
         }
 
         //Checks if the channel trigger caused the ISR to execute.
-        if TPM0_CHANNEL.as_mut().unwrap().channel_flag() {
-            TPM0_CHANNEL.as_mut().unwrap().reset_channel_flag();
+        // if TPM0_CHANNEL.as_mut().unwrap().channel_flag() {
+        //     TPM0_CHANNEL.as_mut().unwrap().reset_channel_flag();
+
+        //Checks if the GPIO interrupt triggered the ISR.
+        if PORT_D.as_mut().unwrap().pin(6).is_interrupt() {
+        	PORT_D.as_mut().unwrap().pin(6).reset_interrupt_flag();
             LED_PIN.as_mut().unwrap().toggle();
 
         	//Time for one full revolution in seconds.
@@ -177,6 +196,8 @@ fn tpm_isr() {
         }
     }
 }
+
+
 
 //TODO: change to use USB_Listen for the panic messages
 #[panic_handler]

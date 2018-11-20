@@ -117,11 +117,49 @@ pub enum Pull {
     Up = 3,
 }
 
+#[derive(Clone, Copy)]
+pub enum InterruptModes {
+    Disabled = 0,
+    DMARisingEdge = 1,
+    DMAFallingEdge = 2,
+    DMAEitherEdge = 3,
+    InterruptLogic0 = 8,
+    InterruptRisingEdge = 9,
+    InterruptFallingEdge = 10,
+    InterruptEitherEdge = 11,
+    InterruptLogic1 = 12,
+}
+
 impl<'a> Pin<'a> {
     fn set_mode(&mut self, mode: u32) {
         unsafe {
             self.port.reg().pcr[self.pin].modify(|mut pcr| {
                 pcr.set_bits(8..11, mode);
+                pcr
+            });
+        }
+    }
+
+    pub fn set_interrupt(&mut self, mode: u32) {
+        unsafe {
+            self.port.reg().pcr[self.pin].modify(|mut pcr| {
+                pcr.set_bits(16..20, mode);
+                pcr
+            });
+        }
+    }
+
+    pub fn is_interrupt(&mut self) -> bool {
+        if self.port.reg().pcr[self.pin].read().get_bit(24) {
+            return true;
+        }
+        return false;
+    }
+
+    pub fn reset_interrupt_flag(&mut self) {
+        unsafe {
+            self.port.reg().pcr[self.pin].modify(|mut pcr| {
+                pcr.set_bit(24, true);
                 pcr
             });
         }
